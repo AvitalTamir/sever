@@ -554,16 +554,17 @@ pub const SevParser = struct {
                 },
             };
         } else {
-            // Simple case: (a op b)
+            // Parse chained operations: (a op b op c op d ...)
             const left = try self.parseSimpleExpression();
             
+            // Check if there's at least one operator
             if (self.pos < self.input.len and self.isOperator(self.peek())) {
-                const op_char = self.advance();
+                // Parse the first operation
+                const current_op = self.advance();
                 const right = try self.parseSimpleExpression();
                 
-                if (!self.consume(')')) return ParseError.InvalidSyntax;
-                
-                const op_kind = switch (op_char) {
+                // Create the first binary operation
+                const current_op_kind = switch (current_op) {
                     '+' => SirsParser.OpKind.add,
                     '-' => SirsParser.OpKind.sub,
                     '*' => SirsParser.OpKind.mul,
@@ -574,17 +575,49 @@ pub const SevParser = struct {
                     else => return ParseError.InvalidSyntax,
                 };
                 
-                var args = ArrayList(Expression).init(self.allocator);
-                errdefer args.deinit();
-                try args.append(left);
-                try args.append(right);
+                var current_args = ArrayList(Expression).init(self.allocator);
+                errdefer current_args.deinit();
+                try current_args.append(left);
+                try current_args.append(right);
                 
-                return Expression{
+                var current_expr = Expression{
                     .op = .{
-                        .kind = op_kind,
-                        .args = args,
+                        .kind = current_op_kind,
+                        .args = current_args,
                     },
                 };
+                
+                // Chain additional operations left-associatively: ((a+b)+c)+d
+                while (self.pos < self.input.len and self.isOperator(self.peek()) and self.peek() != ')') {
+                    const next_op = self.advance();
+                    const next_right = try self.parseSimpleExpression();
+                    
+                    const next_op_kind = switch (next_op) {
+                        '+' => SirsParser.OpKind.add,
+                        '-' => SirsParser.OpKind.sub,
+                        '*' => SirsParser.OpKind.mul,
+                        '/' => SirsParser.OpKind.div,
+                        '>' => SirsParser.OpKind.gt,
+                        '<' => SirsParser.OpKind.lt,
+                        '=' => SirsParser.OpKind.eq,
+                        else => return ParseError.InvalidSyntax,
+                    };
+                    
+                    var next_args = ArrayList(Expression).init(self.allocator);
+                    errdefer next_args.deinit();
+                    try next_args.append(current_expr);
+                    try next_args.append(next_right);
+                    
+                    current_expr = Expression{
+                        .op = .{
+                            .kind = next_op_kind,
+                            .args = next_args,
+                        },
+                    };
+                }
+                
+                if (!self.consume(')')) return ParseError.InvalidSyntax;
+                return current_expr;
             } else {
                 if (!self.consume(')')) return ParseError.InvalidSyntax;
                 return left;
