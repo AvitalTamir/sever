@@ -4,7 +4,7 @@ const Allocator = std.mem.Allocator;
 const ArrayList = std.ArrayList;
 
 const SirsParser = @import("sirs.zig");
-const SevSimpleParser = @import("sev_simple.zig").SevSimpleParser;
+const SevParser = @import("sev.zig").SevParser;
 const TypeChecker = @import("typechecker.zig").TypeChecker;
 const CodeGen = @import("codegen.zig").CodeGen;
 const McpServer = @import("mcp.zig").McpServer;
@@ -289,7 +289,8 @@ pub const SeverCompiler = struct {
     fn parseProgram(self: *SeverCompiler, filename: []const u8, content: []const u8) !SirsParser.Program {
         if (std.mem.endsWith(u8, filename, ".sev")) {
             // Parse SEV format
-            var sev_parser = SevSimpleParser.init(self.allocator, content);
+            var sev_parser = SevParser.init(self.allocator, content);
+            defer sev_parser.deinit();
             return try sev_parser.parse();
         } else {
             // Default to SIRS JSON format

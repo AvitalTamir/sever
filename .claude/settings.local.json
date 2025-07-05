@@ -124,7 +124,10 @@
       "Bash(if /Users/avitaltamir/projects/sever1/dist/sev build \"$file\")",
       "Bash(do if ! dist/sev build \"$file\")",
       "Bash(then echo \"❌ FAILING: $file\")",
-      "Bash(dist/test_for_loop:*)"
+      "Bash(dist/test_for_loop:*)",
+      "Bash(if ./dist/sev build \"$file\")",
+      "Bash(then echo \"✅ $file\")",
+      "Bash(else echo \"❌ $file\")"
     ],
     "deny": []
   }

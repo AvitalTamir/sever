@@ -276,14 +276,6 @@ pub const SevGenerator = struct {
         }
     }
 
-    fn needsParentheses(self: *SevGenerator, expr: Expression) bool {
-        _ = self;
-        return switch (expr) {
-            .binary => true,
-            .unary => true,
-            else => false,
-        };
-    }
 };
 
 /// Convenience function to generate SEV from program

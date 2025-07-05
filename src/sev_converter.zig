@@ -1,7 +1,7 @@
 const std = @import("std");
 const Allocator = std.mem.Allocator;
 const sirs = @import("sirs.zig");
-const sev_simple = @import("sev_simple.zig");
+const sev = @import("sev.zig");
 const sev_gen = @import("sev_generator.zig");
 
 /// Convert between SIRS JSON and SEV formats
@@ -24,26 +24,116 @@ pub const Converter = struct {
 
     /// Convert SEV to SIRS JSON format
     pub fn sevToJson(self: *Converter, sev_input: []const u8) ![]const u8 {
-        // For now, just create a simple JSON representation
-        // TODO: Proper AST to JSON conversion when needed
-        const json_template = 
-            \\{{
-            \\  "program": {{
-            \\    "entry": "main",
-            \\    "functions": {{
-            \\      "main": {{
-            \\        "args": [],
-            \\        "return": "i32",
-            \\        "body": [
-            \\          {{"comment": "Converted from SEV: {s}"}}
-            \\        ]
-            \\      }}
-            \\    }}
-            \\  }}
-            \\}}
-        ;
+        // Parse SEV to AST using the unified parser
+        var parser = sev.SevParser.init(self.allocator, sev_input);
+        defer parser.deinit();
+        const program = try parser.parse();
         
-        return try std.fmt.allocPrint(self.allocator, json_template, .{sev_input});
+        // Build JSON manually since Program struct has complex HashMap fields
+        var json_buffer = std.ArrayList(u8).init(self.allocator);
+        defer json_buffer.deinit();
+        const writer = json_buffer.writer();
+        
+        try writer.writeAll("{\n  \"program\": {\n");
+        try writer.print("    \"entry\": \"{s}\",\n", .{program.entry});
+        try writer.writeAll("    \"functions\": {\n");
+        
+        // Serialize functions
+        var func_iterator = program.functions.iterator();
+        var first_func = true;
+        while (func_iterator.next()) |entry| {
+            if (!first_func) try writer.writeAll(",\n");
+            first_func = false;
+            
+            try writer.print("      \"{s}\": {{\n", .{entry.key_ptr.*});
+            try writer.writeAll("        \"args\": [");
+            
+            // Serialize function arguments
+            for (entry.value_ptr.args.items, 0..) |arg, i| {
+                if (i > 0) try writer.writeAll(", ");
+                try writer.print("{{\"name\": \"{s}\", \"type\": \"{s}\"}}", .{ arg.name, @tagName(arg.type) });
+            }
+            try writer.writeAll("],\n");
+            try writer.print("        \"return\": \"{s}\",\n", .{@tagName(entry.value_ptr.@"return")});
+            try writer.writeAll("        \"body\": [\n");
+            
+            // Serialize function body (statements)
+            for (entry.value_ptr.body.items, 0..) |stmt, i| {
+                if (i > 0) try writer.writeAll(",\n");
+                try writer.writeAll("          ");
+                try self.serializeStatement(writer, stmt);
+            }
+            
+            try writer.writeAll("\n        ]\n      }");
+        }
+        
+        try writer.writeAll("\n    }\n  }\n}");
+        
+        return json_buffer.toOwnedSlice();
+    }
+    
+    fn serializeStatement(self: *Converter, writer: anytype, stmt: sirs.Statement) !void {
+        _ = self;
+        switch (stmt) {
+            .let => |let_stmt| {
+                const type_name = if (let_stmt.type) |t| @tagName(t) else "unknown";
+                try writer.print("{{\"let\": {{\"name\": \"{s}\", \"type\": \"{s}\", \"value\": ", .{ let_stmt.name, type_name });
+                try serializeExpression(writer, let_stmt.value);
+                try writer.writeAll("}}");
+            },
+            .@"return" => |expr| {
+                try writer.writeAll("{\"return\": ");
+                try serializeExpression(writer, expr);
+                try writer.writeAll("}");
+            },
+            .expression => |expr| {
+                try serializeExpression(writer, expr);
+            },
+            .assign => |assign_stmt| {
+                try writer.print("{{\"assign\": {{\"target\": \"{s}\", \"value\": ", .{assign_stmt.target.variable});
+                try serializeExpression(writer, assign_stmt.value);
+                try writer.writeAll("}}");
+            },
+            else => {
+                try writer.writeAll("{\"comment\": \"Unsupported statement type\"}");
+            },
+        }
+    }
+    
+    fn serializeExpression(writer: anytype, expr: sirs.Expression) !void {
+        switch (expr) {
+            .literal => |lit| {
+                switch (lit) {
+                    .integer => |val| try writer.print("{{\"literal\": {}}}", .{val}),
+                    .float => |val| try writer.print("{{\"literal\": {d}}}", .{val}),
+                    .string => |val| try writer.print("{{\"literal\": \"{s}\"}}", .{val}),
+                    .boolean => |val| try writer.print("{{\"literal\": {}}}", .{val}),
+                    .null => try writer.writeAll("{\"literal\": null}"),
+                }
+            },
+            .variable => |name| {
+                try writer.print("{{\"var\": \"{s}\"}}", .{name});
+            },
+            .op => |op_expr| {
+                try writer.print("{{\"op\": {{\"kind\": \"{s}\", \"args\": [", .{@tagName(op_expr.kind)});
+                for (op_expr.args.items, 0..) |arg, i| {
+                    if (i > 0) try writer.writeAll(", ");
+                    try serializeExpression(writer, arg);
+                }
+                try writer.writeAll("]}}");
+            },
+            .call => |call_expr| {
+                try writer.print("{{\"call\": {{\"function\": \"{s}\", \"args\": [", .{call_expr.function});
+                for (call_expr.args.items, 0..) |arg, i| {
+                    if (i > 0) try writer.writeAll(", ");
+                    try serializeExpression(writer, arg);
+                }
+                try writer.writeAll("]}}");
+            },
+            else => {
+                try writer.writeAll("{\"comment\": \"Unsupported expression type\"}");
+            },
+        }
     }
 };
 
