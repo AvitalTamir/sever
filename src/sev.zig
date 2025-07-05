@@ -570,6 +570,7 @@ pub const SevParser = struct {
                     '/' => SirsParser.OpKind.div,
                     '>' => SirsParser.OpKind.gt,
                     '<' => SirsParser.OpKind.lt,
+                    '=' => SirsParser.OpKind.eq,
                     else => return ParseError.InvalidSyntax,
                 };
                 
@@ -686,7 +687,7 @@ pub const SevParser = struct {
         switch (ch) {
             '0'...'9' => return try self.parseNumber(),
             '"' => return try self.parseString(),
-            'a'...'z', 'A'...'Z', '_' => return try self.parseVariable(),
+            'a'...'z', 'A'...'Z', '_' => return try self.parseVariableOrCall(),
             else => return ParseError.UnexpectedToken,
         }
     }

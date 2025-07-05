@@ -127,7 +127,9 @@
       "Bash(dist/test_for_loop:*)",
       "Bash(if ./dist/sev build \"$file\")",
       "Bash(then echo \"✅ $file\")",
-      "Bash(else echo \"❌ $file\")"
+      "Bash(else echo \"❌ $file\")",
+      "Bash(./dist/calculator_final)",
+      "Bash(./dist/test_string_comparison:*)"
     ],
     "deny": []
   }

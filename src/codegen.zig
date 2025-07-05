@@ -162,6 +162,12 @@ pub const CodeGen = struct {
         try self.writeLine("}");
         try self.writeLine("");
         
+        try self.writeLine("fn string_concat(a: []const u8, b: []const u8) []const u8 {");
+        try self.writeLine("    const result = std.fmt.allocPrint(allocator, \"{s}{s}\", .{a, b}) catch return \"<concat_error>\";");
+        try self.writeLine("    return result;");
+        try self.writeLine("}");
+        try self.writeLine("");
+        
         // Add async I/O functions
         try self.writeLine("// Async I/O Functions");
         try self.writeLine("fn async_http_get(url: []const u8) []const u8 {");
@@ -617,7 +623,9 @@ pub const CodeGen = struct {
         try self.writeLine("    const T = @TypeOf(a, b);");
         try self.writeLine("    const info = @typeInfo(T);");
         try self.writeLine("    return switch (info) {");
-        try self.writeLine("        .pointer => |ptr_info| if (ptr_info.child == u8) string_concat_z(a, b) else @compileError(\"Unsupported pointer type: \" ++ @typeName(T)),");
+        try self.writeLine("        .pointer => |ptr_info| if (ptr_info.child == u8) {");
+        try self.writeLine("            return string_concat(a, b);");
+        try self.writeLine("        } else @compileError(\"Unsupported pointer type: \" ++ @typeName(T)),");
         try self.writeLine("        .int, .float, .comptime_int, .comptime_float => a + b,");
         try self.writeLine("        else => @compileError(\"Unsupported type for addition: \" ++ @typeName(T)),");
         try self.writeLine("    };");
@@ -975,6 +983,7 @@ pub const CodeGen = struct {
         try self.writeLine("        .integer => |i| @floatFromInt(i),");
         try self.writeLine("        .float => |f| f,");
         try self.writeLine("        .number_string => |s| std.fmt.parseFloat(f64, s) catch -1.0,");
+        try self.writeLine("        .string => |s| std.fmt.parseFloat(f64, s) catch -1.0,");
         try self.writeLine("        else => -1.0,");
         try self.writeLine("    };");
         try self.writeLine("}");
@@ -1017,12 +1026,12 @@ pub const CodeGen = struct {
         try self.writeLine("fn json_add_number(json_str: []const u8, key: []const u8, value: f64) []const u8 {");
         try self.writeLine("    // Simple JSON number addition");
         try self.writeLine("    if (std.mem.eql(u8, json_str, \"{}\")) {");
-        try self.writeLine("        return std.fmt.allocPrint(allocator, \"{{\\\"{s}\\\": {}}}\", .{key, value}) catch return json_str;");
+        try self.writeLine("        return std.fmt.allocPrint(allocator, \"{{\\\"{s}\\\": {d:.2}}}\", .{key, value}) catch return json_str;");
         try self.writeLine("    } else {");
         try self.writeLine("        const len = json_str.len;");
         try self.writeLine("        if (len > 0 and json_str[len-1] == '}') {");
         try self.writeLine("            const without_brace = json_str[0..len-1];");
-        try self.writeLine("            return std.fmt.allocPrint(allocator, \"{s}, \\\"{s}\\\": {}}}\", .{without_brace, key, value}) catch return json_str;");
+        try self.writeLine("            return std.fmt.allocPrint(allocator, \"{s}, \\\"{s}\\\": {d:.2}}}\", .{without_brace, key, value}) catch return json_str;");
         try self.writeLine("        }");
         try self.writeLine("    }");
         try self.writeLine("    return json_str;");
@@ -1430,6 +1439,9 @@ pub const CodeGen = struct {
             try self.writeIndent();
             try self.writeLine("sever_runtime_init(null);");
         }
+        
+        // Note: Unused parameter warnings are acceptable for HTTP handler functions
+        // where some parameters (like method) may not be used in simple handlers
         
         
         // Handle async function wrapper
@@ -1984,13 +1996,40 @@ pub const CodeGen = struct {
             else => {
                 // Binary operations
                 if (args.items.len >= 2) {
-                    try self.write("(");
-                    try self.generateExpression(@constCast(&args.items[0]));
-                    try self.write(" ");
-                    try self.write(try self.getOperatorSymbol(op_expr.kind));
-                    try self.write(" ");
-                    try self.generateExpression(@constCast(&args.items[1]));
-                    try self.write(")");
+                    // Special handling for string equality/inequality
+                    if (op_expr.kind == .eq or op_expr.kind == .ne) {
+                        const left_expr = &args.items[0];
+                        const right_expr = &args.items[1];
+                        
+                        // Check if either operand is a string literal
+                        const has_string = (left_expr.* == .literal and left_expr.literal == .string) or
+                                         (right_expr.* == .literal and right_expr.literal == .string);
+                        
+                        if (has_string) {
+                            if (op_expr.kind == .ne) try self.write("!");
+                            try self.write("std.mem.eql(u8, ");
+                            try self.generateExpression(@constCast(&args.items[0]));
+                            try self.write(", ");
+                            try self.generateExpression(@constCast(&args.items[1]));
+                            try self.write(")");
+                        } else {
+                            try self.write("(");
+                            try self.generateExpression(@constCast(&args.items[0]));
+                            try self.write(" ");
+                            try self.write(try self.getOperatorSymbol(op_expr.kind));
+                            try self.write(" ");
+                            try self.generateExpression(@constCast(&args.items[1]));
+                            try self.write(")");
+                        }
+                    } else {
+                        try self.write("(");
+                        try self.generateExpression(@constCast(&args.items[0]));
+                        try self.write(" ");
+                        try self.write(try self.getOperatorSymbol(op_expr.kind));
+                        try self.write(" ");
+                        try self.generateExpression(@constCast(&args.items[1]));
+                        try self.write(")");
+                    }
                 } else {
                     return CodeGenError.UnsupportedExpression;
                 }
