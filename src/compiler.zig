@@ -315,11 +315,13 @@ pub const SeverCompiler = struct {
             else => return err,
         };
         
-        // Convert input.sirs.json to input or input.exe
+        // Convert input.sirs.json or input.sev to input or input.exe
         var base_name: []const u8 = input_file;
         
         if (std.mem.endsWith(u8, input_file, ".sirs.json")) {
             base_name = input_file[0..input_file.len - 10]; // Remove .sirs.json
+        } else if (std.mem.endsWith(u8, input_file, ".sev")) {
+            base_name = input_file[0..input_file.len - 4]; // Remove .sev
         }
         
         // Extract just the basename (remove any path components)

@@ -1,0 +1,135 @@
+{
+  "program": {
+    "entry": "main",
+    "functions": {
+      "handle_request": {
+        "args": [
+          {"name": "method", "type": "str"},
+          {"name": "path", "type": "str"}, 
+          {"name": "body", "type": "str"}
+        ],
+        "return": "str",
+        "body": [
+          {
+            "if": {
+              "condition": {
+                "op": {
+                  "kind": "and",
+                  "args": [
+                    {
+                      "call": {
+                        "name": "str_equals",
+                        "args": [
+                          {"var": "method"},
+                          {"literal": "GET"}
+                        ]
+                      }
+                    },
+                    {
+                      "call": {
+                        "name": "str_equals",
+                        "args": [
+                          {"var": "path"},
+                          {"literal": "/"}
+                        ]
+                      }
+                    }
+                  ]
+                }
+              },
+              "then": [
+                {
+                  "return": {
+                    "literal": "{\"message\": \"Welcome to Sever HTTP Server!\", \"version\": \"1.0\"}"
+                  }
+                }
+              ],
+              "else": [
+                {
+                  "if": {
+                    "condition": {
+                      "op": {
+                        "kind": "and",
+                        "args": [
+                          {
+                            "call": {
+                              "name": "str_equals",
+                              "args": [
+                                {"var": "method"},
+                                {"literal": "GET"}
+                              ]
+                            }
+                          },
+                          {
+                            "call": {
+                              "name": "str_equals",
+                              "args": [
+                                {"var": "path"},
+                                {"literal": "/health"}
+                              ]
+                            }
+                          }
+                        ]
+                      }
+                    },
+                    "then": [
+                      {
+                        "return": {
+                          "literal": "{\"status\": \"healthy\"}"
+                        }
+                      }
+                    ],
+                    "else": [
+                      {
+                        "return": {
+                          "literal": "{\"error\": \"Not Found\"}"
+                        }
+                      }
+                    ]
+                  }
+                }
+              ]
+            }
+          }
+        ]
+      },
+      "main": {
+        "args": [],
+        "return": "i32",
+        "body": [
+          {
+            "let": {
+              "name": "port",
+              "type": "i32",
+              "value": {
+                "literal": 8080
+              }
+            }
+          },
+          {
+            "call": {
+              "name": "print",
+              "args": [
+                {"literal": "Starting HTTP server on port 8080..."}
+              ]
+            }
+          },
+          {
+            "call": {
+              "name": "http_serve",
+              "args": [
+                {"var": "port"},
+                {"var": "handle_request"}
+              ]
+            }
+          },
+          {
+            "return": {
+              "literal": 0
+            }
+          }
+        ]
+      }
+    }
+  }
+}

@@ -82,6 +82,11 @@ pub const SevGenerator = struct {
                 try self.output.append('R');
                 try self.generateExpression(stmt.@"return");
             },
+            .expression => {
+                // Format: E<expr>
+                try self.output.append('E');
+                try self.generateExpression(stmt.expression);
+            },
             .@"if" => {
                 // Format: I<condition>?<then>:<else>
                 try self.output.append('I');
@@ -124,8 +129,10 @@ pub const SevGenerator = struct {
                         }
                     },
                     .string => |val| {
-                        // Minimal string encoding - just the content
+                        // String with quotes for proper parsing
+                        try self.output.append('"');
                         try self.output.appendSlice(val);
+                        try self.output.append('"');
                     },
                     .null => {
                         try self.output.append('0');

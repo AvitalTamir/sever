@@ -1,0 +1,63 @@
+{
+  "program": {
+    "entry": "main",
+    "functions": {
+      "handle_request": {
+        "args": [
+          {"name": "method", "type": "str"},
+          {"name": "path", "type": "str"}, 
+          {"name": "body", "type": "str"}
+        ],
+        "return": "str",
+        "body": [
+          {
+            "return": {
+              "literal": "{\"message\": \"Hello from Sever HTTP Server!\", \"path\": \"requested path\"}"
+            }
+          }
+        ]
+      },
+      "main": {
+        "args": [],
+        "return": "i32",
+        "body": [
+          {
+            "let": {
+              "name": "port",
+              "type": "i32",
+              "value": {
+                "literal": 8080
+              }
+            }
+          },
+          {
+            "expression": {
+              "call": {
+                "function": "std_print",
+                "args": [
+                  {"literal": "Starting HTTP server on port 8080..."}
+                ]
+              }
+            }
+          },
+          {
+            "expression": {
+              "call": {
+                "function": "http_serve",
+                "args": [
+                  {"var": "port"},
+                  {"var": "handle_request"}
+                ]
+              }
+            }
+          },
+          {
+            "return": {
+              "literal": 0
+            }
+          }
+        ]
+      }
+    }
+  }
+}

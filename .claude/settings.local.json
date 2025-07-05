@@ -96,7 +96,14 @@
       "Bash(./dist/production_anomaly_detection.sirs.l)",
       "Bash(./dist/adaptive_anomaly_mcmc.sirs.l)",
       "Bash(./dist/clean_alerting_system.sirs.l)",
-      "Bash(./dist/seasonal_anomaly_detection.sirs.l)"
+      "Bash(./dist/seasonal_anomaly_detection.sirs.l)",
+      "Bash(./examples/anomaly_detection_api.sirs.l)",
+      "Bash(./examples/http_demo.sirs.l)",
+      "Bash(./dist/http_demo.sirs.l)",
+      "Bash(./dist/http_server_working.sirs.l)",
+      "Bash(./dist/anomaly_api_complete.sirs.l)",
+      "Bash(dist/sev build:*)",
+      "Bash(mv:*)"
     ],
     "deny": []
   }

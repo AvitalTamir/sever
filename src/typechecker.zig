@@ -897,6 +897,7 @@ pub const TypeChecker = struct {
                std.mem.eql(u8, function_name, "http_post") or
                std.mem.eql(u8, function_name, "http_put") or
                std.mem.eql(u8, function_name, "http_delete") or
+               std.mem.eql(u8, function_name, "http_serve") or
                std.mem.eql(u8, function_name, "file_read") or
                std.mem.eql(u8, function_name, "file_write") or
                std.mem.eql(u8, function_name, "file_append") or
@@ -910,6 +911,10 @@ pub const TypeChecker = struct {
                std.mem.eql(u8, function_name, "json_get_string") or
                std.mem.eql(u8, function_name, "json_get_number") or
                std.mem.eql(u8, function_name, "json_get_bool") or
+               std.mem.eql(u8, function_name, "json_create_object") or
+               std.mem.eql(u8, function_name, "json_add_string") or
+               std.mem.eql(u8, function_name, "json_add_number") or
+               std.mem.eql(u8, function_name, "f64_to_string") or
                std.mem.eql(u8, function_name, "json_has_key") or
                std.mem.eql(u8, function_name, "json_stringify_object") or
                std.mem.eql(u8, function_name, "json_stringify_array") or
@@ -1109,6 +1114,20 @@ pub const TypeChecker = struct {
                 return TypeCheckError.ArgumentTypeMismatch;
             }
             return Type.str;
+        } else if (std.mem.eql(u8, function_name, "http_serve")) {
+            // http_serve(port: i32, handler_name: str) void
+            if (call_expr.args.items.len != 2) {
+                return TypeCheckError.ArgumentCountMismatch;
+            }
+            const port_type = try self.checkExpression(@constCast(&call_expr.args.items[0]), program);
+            if (port_type != .i32) {
+                return TypeCheckError.ArgumentTypeMismatch;
+            }
+            const handler_type = try self.checkExpression(@constCast(&call_expr.args.items[1]), program);
+            if (handler_type != .str) {
+                return TypeCheckError.ArgumentTypeMismatch;
+            }
+            return Type.void;
         } else if (std.mem.eql(u8, function_name, "file_read")) {
             // file_read(path: []const u8) []const u8
             if (call_expr.args.items.len != 1) {
@@ -1244,6 +1263,46 @@ pub const TypeChecker = struct {
                 return TypeCheckError.ArgumentTypeMismatch;
             }
             return Type.bool;
+        } else if (std.mem.eql(u8, function_name, "json_create_object")) {
+            // json_create_object() str
+            if (call_expr.args.items.len != 0) {
+                return TypeCheckError.ArgumentCountMismatch;
+            }
+            return Type.str;
+        } else if (std.mem.eql(u8, function_name, "json_add_string")) {
+            // json_add_string(json_str: str, key: str, value: str) str
+            if (call_expr.args.items.len != 3) {
+                return TypeCheckError.ArgumentCountMismatch;
+            }
+            const json_type = try self.checkExpression(@constCast(&call_expr.args.items[0]), program);
+            const key_type = try self.checkExpression(@constCast(&call_expr.args.items[1]), program);
+            const value_type = try self.checkExpression(@constCast(&call_expr.args.items[2]), program);
+            if (json_type != .str or key_type != .str or value_type != .str) {
+                return TypeCheckError.ArgumentTypeMismatch;
+            }
+            return Type.str;
+        } else if (std.mem.eql(u8, function_name, "json_add_number")) {
+            // json_add_number(json_str: str, key: str, value: f64) str
+            if (call_expr.args.items.len != 3) {
+                return TypeCheckError.ArgumentCountMismatch;
+            }
+            const json_type = try self.checkExpression(@constCast(&call_expr.args.items[0]), program);
+            const key_type = try self.checkExpression(@constCast(&call_expr.args.items[1]), program);
+            const value_type = try self.checkExpression(@constCast(&call_expr.args.items[2]), program);
+            if (json_type != .str or key_type != .str or value_type != .f64) {
+                return TypeCheckError.ArgumentTypeMismatch;
+            }
+            return Type.str;
+        } else if (std.mem.eql(u8, function_name, "f64_to_string")) {
+            // f64_to_string(value: f64) str
+            if (call_expr.args.items.len != 1) {
+                return TypeCheckError.ArgumentCountMismatch;
+            }
+            const value_type = try self.checkExpression(@constCast(&call_expr.args.items[0]), program);
+            if (value_type != .f64) {
+                return TypeCheckError.ArgumentTypeMismatch;
+            }
+            return Type.str;
         } else if (std.mem.eql(u8, function_name, "json_has_key")) {
             // json_has_key(json_str: []const u8, key: []const u8) bool
             if (call_expr.args.items.len != 2) {

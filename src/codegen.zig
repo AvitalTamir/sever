@@ -724,6 +724,129 @@ pub const CodeGen = struct {
         try self.writeLine("}");
         try self.writeLine("");
         
+        // HTTP Server Functions
+        try self.writeLine("// HTTP Server Functions");
+        try self.writeLine("const HttpHandler = *const fn(method: []const u8, path: []const u8, body: []const u8) []const u8;");
+        try self.writeLine("");
+        try self.writeLine("fn http_serve(port: i32, handler_name: []const u8) void {");
+        try self.writeLine("    const socket = std.posix.socket(std.posix.AF.INET, std.posix.SOCK.STREAM, 0) catch {");
+        try self.writeLine("        std.debug.print(\"Failed to create socket\\n\", .{});");
+        try self.writeLine("        return;");
+        try self.writeLine("    };");
+        try self.writeLine("    defer std.posix.close(socket);");
+        try self.writeLine("");
+        try self.writeLine("    // Enable SO_REUSEADDR to allow port reuse");
+        try self.writeLine("    const enable: c_int = 1;");
+        try self.writeLine("    _ = std.posix.setsockopt(socket, std.posix.SOL.SOCKET, std.posix.SO.REUSEADDR, std.mem.asBytes(&enable)) catch {};");
+        try self.writeLine("");
+        try self.writeLine("    const sockaddr = std.posix.sockaddr.in{ .family = std.posix.AF.INET, .port = std.mem.nativeToBig(u16, @intCast(port)), .addr = 0 };");
+        try self.writeLine("    std.posix.bind(socket, @ptrCast(&sockaddr), @sizeOf(@TypeOf(sockaddr))) catch {");
+        try self.writeLine("        std.debug.print(\"Failed to bind to port {}\\n\", .{port});");
+        try self.writeLine("        return;");
+        try self.writeLine("    };");
+        try self.writeLine("");
+        try self.writeLine("    std.posix.listen(socket, 5) catch {");
+        try self.writeLine("        std.debug.print(\"Failed to listen on socket\\n\", .{});");
+        try self.writeLine("        return;");
+        try self.writeLine("    };");
+        try self.writeLine("");
+        try self.writeLine("    std.debug.print(\"HTTP server listening on http://127.0.0.1:{}\\n\", .{port});");
+        try self.writeLine("    std.debug.print(\"Server ready to accept connections (handler: {s})\\n\", .{handler_name});");
+        try self.writeLine("");
+        try self.writeLine("    // Main server loop");
+        try self.writeLine("    while (true) {");
+        try self.writeLine("        var client_addr: std.posix.sockaddr = undefined;");
+        try self.writeLine("        var client_addr_len: std.posix.socklen_t = @sizeOf(@TypeOf(client_addr));");
+        try self.writeLine("");
+        try self.writeLine("        const client_socket = std.posix.accept(socket, &client_addr, &client_addr_len, 0) catch |err| {");
+        try self.writeLine("            std.debug.print(\"Failed to accept connection: {}\\n\", .{err});");
+        try self.writeLine("            continue;");
+        try self.writeLine("        };");
+        try self.writeLine("");
+        try self.writeLine("        // Handle request in blocking mode (simplified for now)");
+        try self.writeLine("        handleHttpRequest(client_socket, handler_name) catch |err| {");
+        try self.writeLine("            std.debug.print(\"Error handling request: {}\\n\", .{err});");
+        try self.writeLine("        };");
+        try self.writeLine("");
+        try self.writeLine("        std.posix.close(client_socket);");
+        try self.writeLine("    }");
+        try self.writeLine("}");
+        try self.writeLine("");
+        
+        try self.writeLine("fn handleHttpRequest(client_socket: std.posix.socket_t, handler_name: []const u8) !void {");
+        try self.writeLine("    var buffer: [4096]u8 = undefined;");
+        try self.writeLine("    const bytes_read = std.posix.recv(client_socket, &buffer, 0) catch |err| {");
+        try self.writeLine("        std.debug.print(\"Failed to read from socket: {}\\n\", .{err});");
+        try self.writeLine("        return;");
+        try self.writeLine("    };");
+        try self.writeLine("");
+        try self.writeLine("    if (bytes_read == 0) return; // Client closed connection");
+        try self.writeLine("");
+        try self.writeLine("    const request = buffer[0..bytes_read];");
+        try self.writeLine("    std.debug.print(\"Received {} bytes\\n\", .{bytes_read});");
+        try self.writeLine("");
+        try self.writeLine("    // Parse HTTP request line");
+        try self.writeLine("    var lines = std.mem.splitSequence(u8, request, \"\\r\\n\");");
+        try self.writeLine("    const first_line = lines.next() orelse return;");
+        try self.writeLine("");
+        try self.writeLine("    var request_parts = std.mem.splitSequence(u8, first_line, \" \");");
+        try self.writeLine("    const method = request_parts.next() orelse \"GET\";");
+        try self.writeLine("    const path = request_parts.next() orelse \"/\";");
+        try self.writeLine("    const version = request_parts.next() orelse \"HTTP/1.1\";");
+        try self.writeLine("    _ = version;");
+        try self.writeLine("");
+        try self.writeLine("    // Skip headers and find body");
+        try self.writeLine("    var body: []const u8 = \"\";");
+        try self.writeLine("    var found_empty_line = false;");
+        try self.writeLine("    while (lines.next()) |line| {");
+        try self.writeLine("        if (line.len == 0) {");
+        try self.writeLine("            found_empty_line = true;");
+        try self.writeLine("            break;");
+        try self.writeLine("        }");
+        try self.writeLine("    }");
+        try self.writeLine("");
+        try self.writeLine("    if (found_empty_line) {");
+        try self.writeLine("        // Get the remaining data as body");
+        try self.writeLine("        const header_end_pos = std.mem.indexOf(u8, request, \"\\r\\n\\r\\n\");");
+        try self.writeLine("        if (header_end_pos) |pos| {");
+        try self.writeLine("            const body_start = pos + 4;");
+        try self.writeLine("            if (body_start < request.len) {");
+        try self.writeLine("                body = request[body_start..];");
+        try self.writeLine("            }");
+        try self.writeLine("        }");
+        try self.writeLine("    }");
+        try self.writeLine("");
+        try self.writeLine("    std.debug.print(\"Request: {s} {s} (body: {} bytes)\\n\", .{method, path, body.len});");
+        try self.writeLine("");
+        try self.writeLine("    // Call the appropriate handler function");
+        try self.writeLine("    var response: []const u8 = \"\";");
+        try self.writeLine("    ");
+        try self.writeLine("    // Dynamic handler dispatch - this will be replaced with proper function pointer logic");
+        try self.writeLine("    response = callHandler(handler_name, method, path, body);");
+        try self.writeLine("");
+        try self.writeLine("    // Send HTTP response");
+        try self.writeLine("    const http_response = std.fmt.allocPrint(allocator, ");
+        try self.writeLine("        \"HTTP/1.1 200 OK\\r\\n\" ++");
+        try self.writeLine("        \"Content-Type: application/json\\r\\n\" ++");
+        try self.writeLine("        \"Content-Length: {}\\r\\n\" ++");
+        try self.writeLine("        \"Access-Control-Allow-Origin: *\\r\\n\" ++");
+        try self.writeLine("        \"Access-Control-Allow-Methods: GET, POST, PUT, DELETE\\r\\n\" ++");
+        try self.writeLine("        \"Access-Control-Allow-Headers: Content-Type\\r\\n\" ++");
+        try self.writeLine("        \"\\r\\n\" ++");
+        try self.writeLine("        \"{s}\",");
+        try self.writeLine("        .{response.len, response}) catch {");
+        try self.writeLine("        std.debug.print(\"Failed to format HTTP response\\n\", .{});");
+        try self.writeLine("        return;");
+        try self.writeLine("    };");
+        try self.writeLine("    defer allocator.free(http_response);");
+        try self.writeLine("");
+        try self.writeLine("    _ = std.posix.send(client_socket, http_response, 0) catch |err| {");
+        try self.writeLine("        std.debug.print(\"Failed to send response: {}\\n\", .{err});");
+        try self.writeLine("    };");
+        try self.writeLine("}");
+        try self.writeLine("");
+        
+        
         // File I/O standard library functions
         try self.writeLine("// File I/O Functions");
         try self.writeLine("fn file_read(path: []const u8) []const u8 {");
@@ -867,6 +990,47 @@ pub const CodeGen = struct {
         try self.writeLine("    if (value != .bool) return false;");
         try self.writeLine("");
         try self.writeLine("    return value.bool;");
+        try self.writeLine("}");
+        try self.writeLine("");
+        
+        // Additional JSON utility functions for HTTP APIs
+        try self.writeLine("fn json_create_object() []const u8 {");
+        try self.writeLine("    return \"{}\";");
+        try self.writeLine("}");
+        try self.writeLine("");
+        
+        try self.writeLine("fn json_add_string(json_str: []const u8, key: []const u8, value: []const u8) []const u8 {");
+        try self.writeLine("    // Simple JSON string addition - removes closing brace and adds key-value");
+        try self.writeLine("    if (std.mem.eql(u8, json_str, \"{}\")) {");
+        try self.writeLine("        return std.fmt.allocPrint(allocator, \"{{\\\"{s}\\\": \\\"{s}\\\"}}\", .{key, value}) catch return json_str;");
+        try self.writeLine("    } else {");
+        try self.writeLine("        const len = json_str.len;");
+        try self.writeLine("        if (len > 0 and json_str[len-1] == '}') {");
+        try self.writeLine("            const without_brace = json_str[0..len-1];");
+        try self.writeLine("            return std.fmt.allocPrint(allocator, \"{s}, \\\"{s}\\\": \\\"{s}\\\"}}\", .{without_brace, key, value}) catch return json_str;");
+        try self.writeLine("        }");
+        try self.writeLine("    }");
+        try self.writeLine("    return json_str;");
+        try self.writeLine("}");
+        try self.writeLine("");
+        
+        try self.writeLine("fn json_add_number(json_str: []const u8, key: []const u8, value: f64) []const u8 {");
+        try self.writeLine("    // Simple JSON number addition");
+        try self.writeLine("    if (std.mem.eql(u8, json_str, \"{}\")) {");
+        try self.writeLine("        return std.fmt.allocPrint(allocator, \"{{\\\"{s}\\\": {}}}\", .{key, value}) catch return json_str;");
+        try self.writeLine("    } else {");
+        try self.writeLine("        const len = json_str.len;");
+        try self.writeLine("        if (len > 0 and json_str[len-1] == '}') {");
+        try self.writeLine("            const without_brace = json_str[0..len-1];");
+        try self.writeLine("            return std.fmt.allocPrint(allocator, \"{s}, \\\"{s}\\\": {}}}\", .{without_brace, key, value}) catch return json_str;");
+        try self.writeLine("        }");
+        try self.writeLine("    }");
+        try self.writeLine("    return json_str;");
+        try self.writeLine("}");
+        try self.writeLine("");
+        
+        try self.writeLine("fn f64_to_string(value: f64) []const u8 {");
+        try self.writeLine("    return std.fmt.allocPrint(allocator, \"{d}\", .{value}) catch \"0.0\";");
         try self.writeLine("}");
         try self.writeLine("");
         
@@ -1191,6 +1355,9 @@ pub const CodeGen = struct {
             try self.generateFunction(func_name, function);
             try self.writeLine("");
         }
+        
+        // Generate dynamic callHandler function based on available functions
+        try self.generateCallHandlerFunction(program);
         
         // Generate main function wrapper if entry point is not "main"
         if (!std.mem.eql(u8, program.entry, "main")) {
@@ -2616,6 +2783,82 @@ pub const CodeGen = struct {
         try self.writeLine("            return null;");
         try self.writeLine("        }");
         try self.writeLine("    };");
+        try self.writeLine("}");
+        try self.writeLine("");
+    }
+    
+    fn generateCallHandlerFunction(self: *CodeGen, program: *Program) CodeGenError!void {
+        try self.writeLine("fn callHandler(handler_name: []const u8, method: []const u8, path: []const u8, body: []const u8) []const u8 {");
+        self.indent_level += 1;
+        
+        // Generate if-else chain for each available function
+        var func_iter = program.functions.iterator();
+        var first = true;
+        while (func_iter.next()) |entry| {
+            const func_name = entry.key_ptr.*;
+            const function = entry.value_ptr;
+            
+            // Skip main function
+            if (std.mem.eql(u8, func_name, "main")) continue;
+            
+            // Generate handler dispatch based on function signature
+            if (first) {
+                try self.writeIndent();
+                try self.write("if (std.mem.eql(u8, handler_name, \"");
+                try self.write(func_name);
+                try self.writeLine("\")) {");
+                first = false;
+            } else {
+                try self.writeIndent();
+                try self.write("} else if (std.mem.eql(u8, handler_name, \"");
+                try self.write(func_name);
+                try self.writeLine("\")) {");
+            }
+            
+            self.indent_level += 1;
+            try self.writeIndent();
+            try self.write("return ");
+            try self.write(func_name);
+            try self.write("(");
+            
+            // Generate parameters based on function signature
+            for (function.args.items, 0..) |param, i| {
+                if (i > 0) try self.write(", ");
+                
+                // Map standard HTTP parameters
+                if (std.mem.eql(u8, param.name, "method")) {
+                    try self.write("method");
+                } else if (std.mem.eql(u8, param.name, "path")) {
+                    try self.write("path");
+                } else if (std.mem.eql(u8, param.name, "body")) {
+                    try self.write("body");
+                } else {
+                    // For other parameters, provide defaults based on type
+                    switch (param.type) {
+                        .f64 => try self.write("0.0"),
+                        .i32 => try self.write("0"),
+                        .str => try self.write("\"\""),
+                        .bool => try self.write("false"),
+                        else => try self.write("undefined"),
+                    }
+                }
+            }
+            
+            try self.writeLine(");");
+            self.indent_level -= 1;
+        }
+        
+        // Default case
+        try self.writeIndent();
+        try self.writeLine("} else {");
+        self.indent_level += 1;
+        try self.writeIndent();
+        try self.writeLine("return \"{\\\"error\\\": \\\"Unknown handler\\\"}\";");
+        self.indent_level -= 1;
+        try self.writeIndent();
+        try self.writeLine("}");
+        
+        self.indent_level -= 1;
         try self.writeLine("}");
         try self.writeLine("");
     }
