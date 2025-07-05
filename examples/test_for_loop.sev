@@ -1,0 +1,1 @@
+Pmain|Dmain[]I;Mi:I=0;W(i<3)?ECstd_print("Loop iteration");Ai=(i+1)|ECstd_print("done");R0

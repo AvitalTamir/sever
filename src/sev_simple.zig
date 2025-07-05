@@ -150,15 +150,20 @@ pub const SevSimpleParser = struct {
         };
     }
 
-    fn parseStatement(self: *SevSimpleParser) !Statement {
+    fn parseStatement(self: *SevSimpleParser) ParseError!Statement {
         const ch = self.peek();
         
         switch (ch) {
             'L' => return try self.parseLetStatement(),
+            'M' => return try self.parseMutableLetStatement(),
             'R' => return try self.parseReturnStatement(),
             'E' => return try self.parseExpressionStatement(),
             'A' => return try self.parseAssignStatement(),
             'I' => return try self.parseIfStatement(),
+            'W' => return try self.parseWhileStatement(),
+            'F' => return try self.parseForStatement(),
+            'B' => return try self.parseBreakStatement(),
+            'N' => return try self.parseContinueStatement(),
             '0' => {
                 // Skip placeholder statements
                 _ = self.advance();
@@ -185,6 +190,28 @@ pub const SevSimpleParser = struct {
                 .name = name,
                 .type = var_type,
                 .mutable = false,
+                .value = value,
+            },
+        };
+    }
+
+    fn parseMutableLetStatement(self: *SevSimpleParser) ParseError!Statement {
+        // Expected: Ma:I=10 or Msum:I=(a+b) - same as let but mutable
+        if (!self.consume('M')) return ParseError.InvalidSyntax;
+        
+        const name_slice = try self.parseIdentifier();
+        const name = try self.allocator.dupe(u8, name_slice);
+        errdefer self.allocator.free(name);
+        if (!self.consume(':')) return ParseError.InvalidSyntax;
+        const var_type = try self.parseType();
+        if (!self.consume('=')) return ParseError.InvalidSyntax;
+        const value = try self.parseExpression();
+        
+        return Statement{
+            .let = .{
+                .name = name,
+                .type = var_type,
+                .mutable = true,
                 .value = value,
             },
         };
@@ -218,6 +245,7 @@ pub const SevSimpleParser = struct {
             '0'...'9' => return try self.parseNumber(),
             'a'...'z', 'A'...'Z', '_' => return try self.parseVariableOrCall(),
             '"' => return try self.parseString(),
+            '[' => return try self.parseArrayLiteral(),
             else => return ParseError.UnexpectedToken,
         }
     }
@@ -496,27 +524,163 @@ pub const SevSimpleParser = struct {
         };
     }
 
-    fn parseIfStatement(self: *SevSimpleParser) !Statement {
-        // Expected: Icondition?then:else (simplified)
+    fn parseIfStatement(self: *SevSimpleParser) ParseError!Statement {
+        // Expected: I<condition>?<then_statements>:<else_statements>|
         if (!self.consume('I')) return ParseError.InvalidSyntax;
         
         const condition = try self.parseExpression();
         if (!self.consume('?')) return ParseError.InvalidSyntax;
         
-        // For now, just skip the then/else parts and return a minimal if statement
-        while (self.pos < self.input.len and self.peek() != ';' and self.peek() != 'L' and self.peek() != 'R' and self.peek() != 'E') {
-            _ = self.advance();
-        }
-        
+        // Parse then block statements until we hit ':' or '|'
         var then_statements = ArrayList(Statement).init(self.allocator);
         errdefer then_statements.deinit();
+        
+        while (self.pos < self.input.len and self.peek() != ':' and self.peek() != '|') {
+            const stmt = try self.parseStatement();
+            try then_statements.append(stmt);
+        }
+        
+        // Parse optional else block
+        var else_statements: ?ArrayList(Statement) = null;
+        if (self.pos < self.input.len and self.peek() == ':') {
+            _ = self.advance(); // consume ':'
+            
+            var else_stmts = ArrayList(Statement).init(self.allocator);
+            errdefer else_stmts.deinit();
+            
+            while (self.pos < self.input.len and self.peek() != '|') {
+                const stmt = try self.parseStatement();
+                try else_stmts.append(stmt);
+            }
+            
+            else_statements = else_stmts;
+        }
+        
+        // Consume end marker
+        if (!self.consume('|')) return ParseError.InvalidSyntax;
         
         return Statement{
             .@"if" = .{
                 .condition = condition,
                 .then = then_statements,
-                .@"else" = null,
+                .@"else" = else_statements,
             },
+        };
+    }
+
+    fn parseWhileStatement(self: *SevSimpleParser) ParseError!Statement {
+        // Expected: W<condition>?<body_statements>|
+        if (!self.consume('W')) return ParseError.InvalidSyntax;
+        
+        const condition = try self.parseExpression();
+        if (!self.consume('?')) return ParseError.InvalidSyntax;
+        
+        // Parse body statements until we hit '|'
+        var body_statements = ArrayList(Statement).init(self.allocator);
+        errdefer body_statements.deinit();
+        
+        while (self.pos < self.input.len and self.peek() != '|') {
+            const stmt = try self.parseStatement();
+            try body_statements.append(stmt);
+            
+            // Consume semicolon if present
+            if (self.pos < self.input.len and self.peek() == ';') {
+                _ = self.advance();
+            }
+        }
+        
+        // Consume end marker
+        if (!self.consume('|')) return ParseError.InvalidSyntax;
+        
+        return Statement{
+            .@"while" = .{
+                .condition = condition,
+                .body = body_statements,
+            },
+        };
+    }
+
+    fn parseForStatement(self: *SevSimpleParser) ParseError!Statement {
+        // Expected: F<variable>@<iterable>?<body_statements>|
+        if (!self.consume('F')) return ParseError.InvalidSyntax;
+        
+        const var_name_slice = try self.parseIdentifier();
+        const var_name = try self.allocator.dupe(u8, var_name_slice);
+        errdefer self.allocator.free(var_name);
+        
+        if (!self.consume('@')) return ParseError.InvalidSyntax;
+        
+        const iterable = try self.parseExpression();
+        if (!self.consume('?')) return ParseError.InvalidSyntax;
+        
+        // Parse body statements until we hit '|'
+        var body_statements = ArrayList(Statement).init(self.allocator);
+        errdefer body_statements.deinit();
+        
+        while (self.pos < self.input.len and self.peek() != '|') {
+            const stmt = try self.parseStatement();
+            try body_statements.append(stmt);
+            
+            // Consume semicolon if present
+            if (self.pos < self.input.len and self.peek() == ';') {
+                _ = self.advance();
+            }
+        }
+        
+        // Consume end marker
+        if (!self.consume('|')) return ParseError.InvalidSyntax;
+        
+        return Statement{
+            .@"for" = .{
+                .variable = var_name,
+                .iterable = iterable,
+                .body = body_statements,
+            },
+        };
+    }
+
+    fn parseBreakStatement(self: *SevSimpleParser) ParseError!Statement {
+        // Expected: B
+        if (!self.consume('B')) return ParseError.InvalidSyntax;
+        
+        return Statement{
+            .@"break" = {},
+        };
+    }
+
+    fn parseContinueStatement(self: *SevSimpleParser) ParseError!Statement {
+        // Expected: N
+        if (!self.consume('N')) return ParseError.InvalidSyntax;
+        
+        return Statement{
+            .@"continue" = {},
+        };
+    }
+
+    fn parseArrayLiteral(self: *SevSimpleParser) ParseError!Expression {
+        // Expected: [<elements>]
+        if (!self.consume('[')) return ParseError.InvalidSyntax;
+        
+        var elements = ArrayList(Expression).init(self.allocator);
+        errdefer elements.deinit();
+        
+        // Parse elements
+        while (self.peek() != ']') {
+            const elem = try self.parseExpression();
+            try elements.append(elem);
+            
+            // Check for comma (more elements) or closing bracket
+            if (self.peek() == ',') {
+                _ = self.advance(); // consume comma
+            } else if (self.peek() != ']') {
+                return ParseError.InvalidSyntax;
+            }
+        }
+        
+        if (!self.consume(']')) return ParseError.InvalidSyntax;
+        
+        return Expression{
+            .array = elements,
         };
     }
 };

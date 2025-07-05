@@ -1,0 +1,1 @@
+Pmain|Dmain[]I;Mcount:I=0;ECstd_print("Starting while loop with mutable variable");W(count<3)?ECstd_print("In loop");ECstd_print_int(count);Lnext:I=(count+1);Acount=next;|ECstd_print("Loop finished");ECstd_print_int(count);Rcount

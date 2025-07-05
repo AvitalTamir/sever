@@ -1,1 +1,1 @@
-Pmain|Dfib[n:I]I;I<=n,1?Rn:R+Cfib(-n,1),Cfib(-n,2)Dmain[]I;RCfib(10)
+Pmain|Dfib[n:I]I;Lresult:I=n;Rresult;Dmain[]I;ECstd_print("Simple Fibonacci Demo");Lf3:I=Cfib(3);ECstd_print("Fibonacci sequence computed");Rf3

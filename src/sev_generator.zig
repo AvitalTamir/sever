@@ -65,8 +65,12 @@ pub const SevGenerator = struct {
     fn generateStatement(self: *SevGenerator, stmt: Statement) !void {
         switch (stmt) {
             .let => {
-                // Format: L<name>:<type>=<value>
-                try self.output.append('L');
+                // Format: L<name>:<type>=<value> or M<name>:<type>=<value> for mutable
+                if (stmt.let.mutable) {
+                    try self.output.append('M');
+                } else {
+                    try self.output.append('L');
+                }
                 try self.output.appendSlice(stmt.let.name);
                 try self.output.append(':');
                 if (stmt.let.type) |let_type| {
@@ -88,17 +92,64 @@ pub const SevGenerator = struct {
                 try self.generateExpression(stmt.expression);
             },
             .@"if" => {
-                // Format: I<condition>?<then>:<else>
+                // Format: I<condition>?<then_statements>:<else_statements>|
                 try self.output.append('I');
                 try self.generateExpression(stmt.@"if".condition);
                 try self.output.append('?');
-                // TODO: Handle statement blocks properly
-                try self.output.append('0'); // Placeholder
                 
-                if (stmt.@"if".@"else") |_| {
-                    try self.output.append(':');
-                    try self.output.append('0'); // Placeholder
+                // Generate then block statements
+                for (stmt.@"if".then.items) |*then_stmt| {
+                    try self.generateStatement(then_stmt.*);
                 }
+                
+                // Generate else block if present
+                if (stmt.@"if".@"else") |else_statements| {
+                    try self.output.append(':');
+                    for (else_statements.items) |*else_stmt| {
+                        try self.generateStatement(else_stmt.*);
+                    }
+                }
+                
+                // End marker
+                try self.output.append('|');
+            },
+            .@"while" => {
+                // Format: W<condition>?<body_statements>|
+                try self.output.append('W');
+                try self.generateExpression(stmt.@"while".condition);
+                try self.output.append('?');
+                
+                // Generate body statements
+                for (stmt.@"while".body.items) |*body_stmt| {
+                    try self.generateStatement(body_stmt.*);
+                }
+                
+                // End marker
+                try self.output.append('|');
+            },
+            .@"for" => {
+                // Format: F<variable>@<iterable>?<body_statements>|
+                try self.output.append('F');
+                try self.output.appendSlice(stmt.@"for".variable);
+                try self.output.append('@');
+                try self.generateExpression(stmt.@"for".iterable);
+                try self.output.append('?');
+                
+                // Generate body statements
+                for (stmt.@"for".body.items) |*body_stmt| {
+                    try self.generateStatement(body_stmt.*);
+                }
+                
+                // End marker
+                try self.output.append('|');
+            },
+            .@"break" => {
+                // Format: B
+                try self.output.append('B');
+            },
+            .@"continue" => {
+                // Format: N (N for coNtinue)
+                try self.output.append('N');
             },
             else => {
                 // For now, just output a placeholder for unsupported statements

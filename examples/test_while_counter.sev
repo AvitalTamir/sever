@@ -1,0 +1,1 @@
+Pmain|Dmain[]I;Mcount:I=0;ECstd_print("Starting while loop");W(count<3)?ECstd_print("In loop");Lnext_count:I=(count+1);Acount=next_count;|ECstd_print("Done");Rcount

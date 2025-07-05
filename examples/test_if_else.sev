@@ -1,0 +1,1 @@
+Pmain|Dmain[]I;Li:I=5;I(i>3)?ECstd_print("greater"):ECstd_print("not greater")|ECstd_print("done");R0

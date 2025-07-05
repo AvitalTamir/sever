@@ -1,1 +1,1 @@
-Pmain|Dmain[]I;0;0;0;0;0;0;0;0;0;0;0;0;0;0;0;0;0;0;0;0;0;R0
+Pmain|Dapi_handler[method:S,path:S,body:S]S;Lresponse:S=Cjson_create_object();Lresponse1:S=Cjson_add_string(response,"status","success");Lresponse2:S=Cjson_add_string(response1,"method",method);Lresponse3:S=Cjson_add_string(response2,"endpoint",path);Lresponse4:S=Cjson_add_string(response3,"body",body);Rresponse4;Dmain[]I;ECstd_print("HTTP Demo Server");ECstd_print("Starting server on port 3000");EChttp_serve(3000,"api_handler");R0

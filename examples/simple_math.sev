@@ -1,1 +1,1 @@
-Pmain|Dmain[]I;Lx:I=10;Ly:I=20;R+xy
+Pmain|Dmain[]I;Lx:I=10;Ly:I=20;Lsum:I=(x+y);ECstd_print("Computing 10 + 20");Rsum

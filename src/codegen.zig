@@ -1431,6 +1431,7 @@ pub const CodeGen = struct {
             try self.writeLine("sever_runtime_init(null);");
         }
         
+        
         // Handle async function wrapper
         if (function.@"async" and !std.mem.eql(u8, name, "main")) {
             try self.writeIndent();
@@ -1570,7 +1571,7 @@ pub const CodeGen = struct {
                 }
                 
                 self.indent_level -= 1;
-                try self.writeLine("}");
+                try self.writeLine("}}");
             },
             
             .@"return" => |*return_expr| {
@@ -2791,8 +2792,53 @@ pub const CodeGen = struct {
         try self.writeLine("fn callHandler(handler_name: []const u8, method: []const u8, path: []const u8, body: []const u8) []const u8 {");
         self.indent_level += 1;
         
-        // Generate if-else chain for each available function
+        // Analyze which parameters are actually used in the handlers first
+        var used_method = false;
+        var used_path = false;
+        var used_body = false;
+        var has_handlers = false;
+        
         var func_iter = program.functions.iterator();
+        while (func_iter.next()) |entry| {
+            const func_name = entry.key_ptr.*;
+            const function = entry.value_ptr;
+            
+            // Skip main function
+            if (std.mem.eql(u8, func_name, "main")) continue;
+            
+            has_handlers = true;
+            for (function.args.items) |param| {
+                if (std.mem.eql(u8, param.name, "method")) used_method = true;
+                if (std.mem.eql(u8, param.name, "path")) used_path = true;
+                if (std.mem.eql(u8, param.name, "body")) used_body = true;
+            }
+        }
+        
+        // Add unused parameter silencing at the beginning
+        if (!has_handlers or !used_method or !used_path or !used_body) {
+            try self.writeIndent();
+            try self.writeLine("// Silence unused parameter warnings");
+            if (!has_handlers) {
+                try self.writeIndent();
+                try self.writeLine("_ = handler_name;");
+            }
+            if (!has_handlers or !used_method) {
+                try self.writeIndent();
+                try self.writeLine("_ = method;");
+            }
+            if (!has_handlers or !used_path) {
+                try self.writeIndent();
+                try self.writeLine("_ = path;");
+            }
+            if (!has_handlers or !used_body) {
+                try self.writeIndent();
+                try self.writeLine("_ = body;");
+            }
+            try self.writeLine("");
+        }
+        
+        // Generate if-else chain for each available function
+        func_iter = program.functions.iterator();
         var first = true;
         while (func_iter.next()) |entry| {
             const func_name = entry.key_ptr.*;
@@ -2848,15 +2894,21 @@ pub const CodeGen = struct {
             self.indent_level -= 1;
         }
         
-        // Default case
-        try self.writeIndent();
-        try self.writeLine("} else {");
-        self.indent_level += 1;
-        try self.writeIndent();
-        try self.writeLine("return \"{\\\"error\\\": \\\"Unknown handler\\\"}\";");
-        self.indent_level -= 1;
-        try self.writeIndent();
-        try self.writeLine("}");
+        // Default case - handle differently based on whether we have handlers
+        if (has_handlers) {
+            try self.writeIndent();
+            try self.writeLine("} else {");
+            self.indent_level += 1;
+            try self.writeIndent();
+            try self.writeLine("return \"{\\\"error\\\": \\\"Unknown handler\\\"}\";");
+            self.indent_level -= 1;
+            try self.writeIndent();
+            try self.writeLine("}");
+        } else {
+            // No handlers available - just return error directly
+            try self.writeIndent();
+            try self.writeLine("return \"{\\\"error\\\": \\\"No handlers available\\\"}\";");
+        }
         
         self.indent_level -= 1;
         try self.writeLine("}");
